@@ -1,0 +1,53 @@
+{
+    "Data": {
+        "dataset": "DVSGesture",
+        "root": "Dataset/DVSGesture/",
+        "data_file": "C11W05.h5",
+        "map_file": "map.csv",
+        "scene": "lab",
+        "__scene": ["fluorescent_led", "fluorescent", "natural", "led", "lab", "all"],
+        "num_samples": null, 
+        "__num_samples": [1000],
+        "enhance_samples": 500, 
+        "__enhance_samples": [1000],
+        "num_classes": 10,
+        "form": "Clip",
+        "num_point": 1024,
+        "size": [16, 128, 128], 
+        "__size": "TxHxW",
+        "split_by": "time", 
+        "ord": "txyp"
+    },
+
+    "Model": {
+        "name": "S2N_3D",
+        "__name": ["i3d", "pointnet2_msg", "S2N_3D", "S2N_2D", "resnet34", "resnet3d", "gait2d", "gait3d"],
+        "in_channels": 2,
+        "nIter": 1,
+        "noise": 1,
+        "enhance": true
+    },
+
+    "Train": {
+        "file_list": "train.csv",
+        "lr": 1.0e-4,
+        "weight_decay": 1.0e-4,
+        "num_epochs": 25,
+        "batch_size": 16,
+        "shuffle": true,
+        "num_workers": 4,
+        "drop_last": true
+    },
+
+    "Test": {
+        "file_list": "test.csv",
+        "batch_size": 16,
+        "scenes": ["fluorescent_led", "fluorescent", "natural", "led", "lab", "all"]
+    },
+
+    "Recorder": {
+        "log_dir": "Output",
+        "save_log": true,
+        "show_tensorboard": false
+    }
+}

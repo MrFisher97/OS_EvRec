@@ -1,0 +1,53 @@
+{
+    "Data": {
+        "dataset": "DAVISGait",
+        "root": "Dataset/DAVISGait/",
+        "data_file": "C36W03.h5",
+        "map_file": "map.csv",
+        "scene": "l0",
+        "__scene": ["l0", "l4", "l16", "l64", "all"],
+        "num_samples": null, 
+        "__num_samples": [1000],
+        "num_classes": 36,
+        "form": "Point",
+        "num_point": null,
+        "size": [5, 224, 224], 
+        "__size": "TxHxW",
+        "split_by": "time", 
+        "ord": "txyp",
+        "reshape": true,
+        "reshape_method": "no"
+    },
+
+    "Model": {
+        "name": "tmp2d",
+        "__name": ["i3d", "pointnet2_msg", "Co_Model_3D", "Co_Model_2D", "resnet34", "resnet3d", "gait2d", "gait3d"],
+        "nIter": 1,
+        "noise": 1,
+        "mlp_layers": [1, 30, 30 ,1],
+        "in_channels": 2
+    },
+
+    "Train": {
+        "file_list": "train.csv",
+        "lr": 1.0e-4,
+        "weight_decay": 1.0e-4,
+        "num_epochs": 25,
+        "batch_size": 32,
+        "shuffle": true,
+        "num_workers": 4,
+        "drop_last": true
+    },
+
+    "Test": {
+        "file_list": "test.csv",
+        "batch_size": 32,
+        "scenes": ["l0", "l4", "l16", "l64", "all"]
+    },
+
+    "Recorder": {
+        "log_dir": "Output",
+        "save_log": true,
+        "show_tensorboard": true
+    }
+}

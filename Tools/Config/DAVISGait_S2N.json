@@ -1,0 +1,61 @@
+{
+    "Data": {
+        "dataset": "DAVISGait",
+        "root": "Dataset/DAVISGait/",
+        "data_file": "C36W03.h5",
+        "map_file": "map.csv",
+        "scene": "l0",
+        "__scene": ["l0", "l4", "l16", "l64", "all"],
+        "num_samples": null, 
+        "__num_samples": [1000],
+        "enhance_samples": 500, 
+        "__enhance_samples": [1000],
+        "num_classes": 36,
+        "form": "Image",
+        "num_point": null,
+        "size": [240, 240], 
+        "__clip_size": "HxW",
+        "split_by": "time", 
+        "ord": "txyp",
+        "reshape": true,
+        "reshape_method": "unique"
+    },
+  
+    "Model": {
+        "name": "S2N_2D",
+        "__name": ["i3d", "pointnet2_msg", "S2N_3D", "S2N_2D", "resnet34", "resnet3d", "gait2d", "gait3d"],
+        "in_channels": 2,
+        "enhance_iter": 4,
+        "nIter": 1,
+        "patch_size": 3, 
+        "E": 0.6, 
+        "e": 5, 
+        "n": 5,
+        "enhance": true
+    },
+  
+    "Train": {
+        "file_list": "train.csv",
+        "lr": 1.0e-4,
+        "weight_decay": 1.0e-5,
+        "num_epochs": 20,
+        "enhance_epochs": 10,
+        "batch_size": 32,
+        "shuffle": true,
+        "num_workers": 4,
+        "drop_last": true
+    },
+  
+    "Test": {
+        "file_list": "test.csv",
+        "batch_size": 32,
+        "num_workers": 4,
+        "scenes": ["l64", "l0", "l4", "l16"]
+    },
+  
+    "Recorder": {
+        "log_dir": "Output",
+        "save_log": true,
+        "show_tensorboard": false
+    }
+  }
