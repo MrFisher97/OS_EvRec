@@ -1,8 +1,6 @@
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
-import gait2d as backbone
-from Enhance import Filter
 from NonLocal import NonLocalBlockND
 
 MIN_VALUE = 1e-6
@@ -117,7 +115,7 @@ class Dynamic_Conv(nn.Module):
         self.activation = nn.ReLU()
 
         # self.norm = nn.BatchNorm3d(out_channels)
-        self.dynamic_weight = nn.Parameter(torch.randn((k, out_channels, in_channels, *kernel_size)))
+        self.dynamic_weight = nn.Parameter(torch.empty((k, out_channels, in_channels, *kernel_size)))
         nn.init.kaiming_uniform_(self.dynamic_weight)
 
 
@@ -133,28 +131,6 @@ class Dynamic_Conv(nn.Module):
         x = F.conv3d(x, weight=weight, padding=self.padding, groups=B)
         x = x.reshape(B, -1, T, H, W)
         return x
-
-class DCD_Conv2d(nn.Conv2d):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1,
-                 padding=1, dilation=1, groups=1, bias=False, theta=0.1, **kwargs):
-
-        super(DCD_Conv2d, self).__init__(in_channels, out_channels, kernel_size, 
-                                        stride, padding, dilation, groups, bias)
-        self.theta = theta
-        self.pool_pad = list(map(lambda x: x // 2, self.kernel_size))
-
-    def forward(self, x):
-        out = super().forward(x)
-        kernel_diff = self.weight.sum((2, 3), keepdim=True)
-        
-        mask = F.avg_pool2d((x > 0).to(torch.float16), kernel_size=self.kernel_size,
-                        padding=self.pool_pad, stride=1)                       
-
-        out_diff = F.conv2d(input=x * mask, weight=kernel_diff, bias=self.bias, 
-                        stride=self.stride, padding=0, groups=self.groups)
-
-        return out - self.theta * out_diff
-
 
 class ConsensusModule(torch.nn.Module):
     def __init__(self, consensus_type, dim=1, input_channels=512, num_segments=5, num_classes=36):
@@ -172,8 +148,8 @@ class ConsensusModule(torch.nn.Module):
         })
         if self.consensus_type == 'rnn':
             self.sensor.update({
-                            'rnn': nn.LSTM(input_size=input_channels, hidden_size=input_channels//2, 
-                                  bidirectional=True, num_layers=1, bias=False, batch_first=False),
+                            'rnn': nn.LSTM(input_size=input_channels, hidden_size=input_channels, 
+                                  bidirectional=False, num_layers=1, bias=False, batch_first=False),
                             })
         elif self.consensus_type == 'atten':
             self.sensor.update({
@@ -183,8 +159,8 @@ class ConsensusModule(torch.nn.Module):
     def forward(self, inp):
         if self.consensus_type == 'rnn':
             inp = inp.view(-1, self.num_segments, inp.size(-1))
-            out = self.sensor['rnn'](inp)[0]
-            out = self.sensor['head'](out)
+            out = self.sensor['rnn'](inp)
+            out = self.sensor['head'](out[0])
             out = out.mean(dim=1)
         elif self.consensus_type == 'avg':
             out = self.sensor['head'](inp)
@@ -222,27 +198,44 @@ class TemporalShift(nn.Module):
         out[:, :, 2 * fold:] = x[:, :, 2 * fold:]  # not shift
         return out.view(nt, c, h, w)
 
-def make_temporal_shift(net, n_segment, n_div=8):
-    n_segment_list = [n_segment] * 2
-    assert n_segment_list[-1] > 0
-    print('=> n_segment per stage: {}'.format(n_segment_list))
+def convert_temporal_shift(net, n_segment, n_div, place='BasicBlock'):
+    for name, mod in list(net.named_children()):
+        convert_temporal_shift(mod, n_segment, n_div, place)
+        if place in str(type(mod)):
+            # blocks = list(mod.children())
+            # for i, b in enumerate(blocks):
+            #     blocks[i] = TemporalShift(b, n_segment=n_segment, n_div=n_div)
+            # return nn.Sequential(*(blocks))
+            # setattr(net, name, nn.Sequential(*(blocks)))
+            setattr(net, name, TemporalShift(mod, n_segment=n_segment, n_div=n_div))
 
-    def make_block_temporal(stage, this_segment):
-        blocks = list(stage.children())
-        print('=> Processing stage with {} blocks'.format(len(blocks)))
-        for i, b in enumerate(blocks):
-            blocks[i] = TemporalShift(b, n_segment=this_segment, n_div=n_div)
-        return nn.Sequential(*(blocks))
+class DCD_Conv2d(nn.Conv2d):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1,
+                 padding=1, dilation=1, groups=1, bias=False, theta=0.1, **kwargs):
 
-    net.features[8] = make_block_temporal(net.features[8], n_segment_list[0])
-    net.features[9] = make_block_temporal(net.features[9], n_segment_list[1])
+        super(DCD_Conv2d, self).__init__(in_channels, out_channels, kernel_size, 
+                                        stride, padding, dilation, groups, bias)
+        self.theta = theta
+        self.pool_pad = list(map(lambda x: x // 2, self.kernel_size))
+
+    def forward(self, x):
+        out = super().forward(x)
+        kernel_diff = self.weight.sum((2, 3), keepdim=True)
+        
+        mask = F.avg_pool2d((x > 0).to(torch.float), kernel_size=self.kernel_size,
+                        padding=self.pool_pad, stride=1)                       
+
+        out_diff = F.conv2d(input=x * mask, weight=kernel_diff, bias=self.bias, 
+                        stride=self.stride, padding=0, groups=self.groups)
+
+        return out - self.theta * out_diff
 
 def convert_CDC(net, theta=0.3):
-    for i, m in enumerate(list(net.children())):
-        convert_CDC(m, theta)
-        if type(m) == nn.Conv2d:
-            m.__dict__.update({'theta':theta})
-            net[i] = DCD_Conv2d(**m.__dict__)
+    for name, mod in list(net.named_children()):
+        convert_CDC(mod, theta)
+        if type(mod) == nn.Conv2d:
+            mod.theta = theta
+            setattr(net, name, DCD_Conv2d(**mod.__dict__))
 
 class Time_filter(nn.Module):
     def __init__(self, in_channels, voxel_size, theta=3/9, mask_kernel=3):
@@ -269,30 +262,44 @@ class Time_filter(nn.Module):
 
 class Model(nn.Module):
     def __init__(self, num_classes, in_channels, nIter=1, size=[5, 224, 224], 
-                       consensus_type='avg', is_shift=False, shift_div=8, 
+                       consensus_type='avg', is_shift=False, shift_div=8, backbone='gait2d',
                        is_CDC=True, CDC_theta=0.1, mask_theta=3/9, mask_kernel=3, **kwargs):
         super().__init__()
-  
+
+        if backbone == 'gait2d':
+            import gait2d
+            backbone_model = gait2d.Model(num_classes=num_classes, in_channels=in_channels)
+            backbone_model.name = 'gait2d'
+            last_layer_name = 'classifier'
+            feature_dim = getattr(backbone_model, last_layer_name)[0].in_features
+            temporal_shift_block = 'ResidualBlock'
+        elif backbone == 'resnet34':
+            import torchvision.models.resnet as resnet
+            backbone_model = resnet.resnet34(pretrained=False)
+            last_layer_name = 'fc'
+            backbone_model.name = 'resnet34'
+            feature_dim = getattr(backbone_model, last_layer_name).in_features
+            temporal_shift_block = 'BasicBlock'
+            conv1 = getattr(backbone_model, 'conv1')
+            setattr(backbone_model, 'conv1', nn.Conv2d(2, conv1.out_channels, conv1.kernel_size, conv1.stride, conv1.padding, conv1.dilation, conv1.groups, conv1.bias))
+
         self.encoder = nn.ModuleDict({
             'tfilter': Time_filter(in_channels=in_channels, voxel_size=size, theta=mask_theta, mask_kernel=mask_kernel),
             'sfilter': nn.Sequential(
                                     Anistropic_Diffusion_3D(in_channels=in_channels, nIter=nIter),
                                     nn.LayerNorm(size[-2:]),
                                     ),
-            'backbone': backbone.Model(num_classes=num_classes, in_channels=in_channels),
+            'backbone': backbone_model,
             'consen': ConsensusModule(consensus_type, dim=1, input_channels=1024, num_segments=size[0], num_classes=num_classes)
         })
-        
-        last_layer_name = 'classifier'
-        feature_dim = getattr(self.encoder['backbone'], last_layer_name)[0].in_features
 
         if is_CDC:
             print('Converting the Conv to CDConv')
             convert_CDC(self.encoder['backbone'], theta=CDC_theta)
 
         if is_shift:
-            print('Adding temporal-shift module...')
-            make_temporal_shift(self.encoder['backbone'], size[0], n_div=int(shift_div))
+            print(f'Converting the {temporal_shift_block} to temporal-shift module...')
+            convert_temporal_shift(self.encoder['backbone'], size[0], n_div=shift_div, place=temporal_shift_block)
 
         last_layer = nn.Sequential(
                                 nn.Linear(feature_dim, 1024),
@@ -300,6 +307,7 @@ class Model(nn.Module):
                                 nn.BatchNorm1d(1024),
                                 nn.Dropout(p=.5),
                                 )
+    
         setattr(self.encoder['backbone'], last_layer_name, last_layer)
 
     def forward(self, x):
@@ -316,25 +324,40 @@ class Model(nn.Module):
     
 if __name__ == '__main__':
     import numpy as np
+    import random
+
+    torch.manual_seed(1)
+    torch.cuda.manual_seed(1)
+    torch.cuda.manual_seed_all(1)
+    random.seed(1)
 
     config = {
             "num_classes": 36,
             "in_channels": 2, 
             "nIter": 1,
-            "consensus_type": 'avg',
+            "consensus_type": 'rnn',
             "is_shift": True, 
-            "shift_div": 4
+            "shift_div": 4,
+            "size": [5, 224, 224], 
+            "backbone": 'gait2d',
+            "is_CDC": True,
+            "CDC_theta": 0.1,
+            "mask_theta": 3/9, 
+            "mask_kernel": 3,
             }
 
     net = Model(**config)
-    print(net)
 
     # for c in net.children():
     #     print(c)
 
-    # params = np.sum([p.numel() for p in net.parameters()]).item()
-    # params = params * 4 // 1024 // 1024
-    # print(f"Loaded parameters : {params:.3e} M")
+    params = np.sum([p.numel() for p in net.encoder['backbone'].parameters()]).item()
+    params = params * 4 // 1024 // 1024
+    print(f"Loaded parameters : {params:.3e} M")
 
-    # a = torch.ones(5, 2, 5, 224, 224)
-    # print(net(a))
+    params = np.sum([p.numel() for p in net.parameters()]).item()
+    params = params * 4 // 1024 // 1024
+    print(f"Loaded parameters : {params:.3e} M")
+
+    a = torch.ones(5, 2, 5, 224, 224)
+    print(net(a))

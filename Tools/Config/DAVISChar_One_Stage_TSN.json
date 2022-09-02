@@ -1,7 +1,7 @@
 {
     "Data": {
-        "dataset": "DAVISGait",
-        "root": "Dataset/DAVISGait/",
+        "dataset": "DAVISChar",
+        "root": "Dataset/DAVISChar/",
         "data_file": "C36W03.h5",
         "map_file": "map.csv",
         "scene": "l0",
@@ -11,7 +11,7 @@
         "num_classes": 36,
         "form": "Acc_Time_Clip",
         "num_point": null,
-        "size": [5, 224, 224], 
+        "size": [3, 224, 224], 
         "__size": "TxHxW",
         "split_by": "time", 
         "ord": "txyp",
@@ -23,14 +23,14 @@
         "name": "One_Stage_TSN",
         "__name": ["i3d", "pointnet2_msg", "Co_Model_3D", "Co_Model_2D", "resnet34", "resnet3d", "gait2d", "gait3d"],
         "in_channels": 2,
-        "backbone": "gait2d",
+        "backbone": "resnet34",
         "nIter": 1,
-        "consensus_type": "rnn",
+        "consensus_type": "avg",
         "mask_theta": 0.333, 
         "mask_kernel": 3,
-        "is_CDC": true, 
+        "is_CDC": false, 
         "CDC_theta": 0.1, 
-        "is_shift": true, 
+        "is_shift": false, 
         "shift_div": 4
     },
 

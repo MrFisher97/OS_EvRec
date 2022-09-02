@@ -221,12 +221,26 @@ class Train_Session(utils.Session):
                     test_info = f"@ {scene}, loss:{test_result['loss']:.3f}, acc:{test_result['acc']:.1%}, {test_result['time']:.6f}  seconds/batch"
                     self.writer.add_text('Test', test_info)
 
+def set_seed(seed=1):
+    import random
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.deterministic = False
+    torch.backends.cudnn.enable = True
+    
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(1)
+
 if __name__ == '__main__':
     args = argparse.ArgumentParser()
-    args.add_argument('--config', type=str, default='DAVISGait_One_Stage_TSN')
+    args.add_argument('--config', type=str, default='DAVISChar_One_Stage_TSN')
     args.add_argument('--override', default=None, help='Arguments for overriding config')
     args = vars(args.parse_args())
     config = json.load(open(f"Tools/Config/{args['config']}.json", 'r'))
+    
+    set_seed(2)
 
     if args['override'] is not None:
         override = args['override'].split(',')

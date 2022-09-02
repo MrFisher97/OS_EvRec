@@ -40,21 +40,13 @@ class Session():
 
         self.logger = logger
         self.writer = SummaryWriter('Runs') if recorder['show_tensorboard'] else None
-        self.plotter = VisdomPlotter(env=f"{self.config['Model']['name']}", port=7000)
+        self.plotter = VisdomPlotter(env=f"{self.config['Model']['name']}", port=7000) if recorder['show_visdom'] else None
 
         self.logger.info(json.dumps(self.config, indent=4, separators=(',', ': ')))       
         self._build_model()
  
 
-    def _build_model(self):
-        torch.backends.cudnn.benchmark = True
-        torch.backends.cudnn.deterministic = False
-        torch.backends.cudnn.enable = True
-        
-        torch.manual_seed(2022)
-        torch.cuda.manual_seed(2022)
-        torch.cuda.manual_seed_all(2022)
-        
+    def _build_model(self):        
         if torch.cuda.is_available():
             torch.cuda.set_device(0)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
