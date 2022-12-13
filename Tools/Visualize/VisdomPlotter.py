@@ -29,6 +29,21 @@ class VisdomPlotter():
         # data = standard(data)
         self.plotter.heatmap(data, win=win,  opts=dict(title=win, colormap='Viridis'))
 
+    def mat_heatMap(self, data, win=None):
+        plt.style.use('default')
+        ax = plt.subplot()
+        fig = ax.imshow(data, cmap='viridis', interpolation='nearest')
+        plt.colorbar(fig)
+        plt.title(win)
+        plt.savefig(win.replace('.', '_') + '.png', format='png')
+
+    def mat_histogram(self, data, win=None):
+        plt.style.use('_mpl-gallery')
+        ax = plt.subplot()
+        ax.hist(data, bins=10)
+        plt.title(win)
+        plt.savefig(win.replace('.', '_') + '.png', format='png')
+
     # def heatMap(self, data, win=None, if_standard=False, folder=None):
     #     if if_standard:
     #         data = standard(data)

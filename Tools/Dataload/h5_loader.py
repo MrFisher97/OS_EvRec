@@ -132,13 +132,13 @@ class Clip(Base_Dataset):
             idx = np.random.choice(event.shape[0], size = self.num_point, replace = replace)
             event = event[idx]
 
-        t, x, y, p = np.split(event[:, (self.ord.find("t"), self.ord.find("x"), self.ord.find("y"), self.ord.find("p"))], 4, axis=1)
+        t, x, y, p = event["t"], event["x"], event["y"], event["p"]
         T, H, W =  self.size
 
         if self.split_by == 'time':
             t = t * 0.99 * T
         elif self.split_by == 'cnt':
-            t = np.arange(0, 1, 1/event.shape[0]) * T
+            t = np.arange(0, 1, 1/t.shape[0]) * T
         
         x = x.astype(np.uint32)
         y = y.astype(np.uint32)
@@ -208,7 +208,7 @@ class Acc_Time_Clip(Base_Dataset):
         event_vox = np.zeros(T * H * W * 2)
         t *= T
         for i in range(T):
-            values =  np.max(1.0 - np.abs(t - i), 0)
+            values =  np.maximum(1.0 - np.abs(t - i), 0)
             # draw in voxel grid
             idx = idx_before_bins + W * H * i
             np.add.at(event_vox, idx, values)

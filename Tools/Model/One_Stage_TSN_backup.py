@@ -212,11 +212,11 @@ def convert_temporal_shift(net, n_segment, n_div, place='BasicBlock'):
             # setattr(net, name, nn.Sequential(*(blocks)))
             setattr(net, name, TemporalShift(mod, n_segment=n_segment, n_div=n_div))
 
-class CDC_Conv2d(nn.Conv2d):
+class DCD_Conv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1,
                  padding=1, dilation=1, groups=1, bias=False, theta=0.1, **kwargs):
 
-        super(CDC_Conv2d, self).__init__(in_channels, out_channels, kernel_size, 
+        super(DCD_Conv2d, self).__init__(in_channels, out_channels, kernel_size, 
                                         stride, padding, dilation, groups, bias)
         self.theta = theta
         self.pool_pad = list(map(lambda x: x // 2, self.kernel_size))
@@ -233,51 +233,12 @@ class CDC_Conv2d(nn.Conv2d):
 
         return out - self.theta * out_diff
 
-class CDC_Conv3d(nn.Conv3d):
-    def __init__(self, in_channels, output_channels, kernel_size=(1, 1, 1),
-                 stride=(1, 1, 1), padding=0, bias=False, dilation=1, 
-                 groups=1, theta=0.3, **kwargs):
-        
-        """Initializes CDC_Conv3d module."""
-        super(CDC_Conv3d, self).__init__(in_channels, output_channels, kernel_size,
-                 stride, padding, dilation, groups, bias)
-        self.theta = theta         
-            
-    def forward(self, x):
-        out = super().forawrd(x)
-
-        if self.weight.shape[2] > 1:
-            mid_t = self.weight.shape[2] // 2
-            kernel_diff = self.weight[:, :, :mid_t, :, :].sum((2, 3, 4)) + self.weight[:, :, (mid_t+1):, :, :].sum((2, 3, 4))
-            kernel_diff = kernel_diff[:, :, None, None, None]
-            if x.size(2) > 2:
-                pool_pad = list(map(lambda x: x // 2, self.kernel_size))
-                mask = F.avg_pool3d((x > 0).to(torch.float16), kernel_size=self.kernel_size,
-                                padding=pool_pad, stride=1)                       
-                mask = mask - F.avg_pool3d((x > 0).to(torch.float16), kernel_size=(1, *self.kernel_size[1:]), 
-                        padding=(0, *pool_pad[1:]), stride=1) / self.kernel_size[0]
-                out_diff = F.conv3d(input=x * mask, weight=kernel_diff, bias=self.bias, stride=self.stride,
-                                padding=0, dilation=self.dilation, groups=self.groups)
-            else:    
-                out_diff = F.conv3d(input=x, weight=kernel_diff, bias=self.bias, stride=self.stride,
-                                padding=0, dilation=self.dilation, groups=self.groups)
-            out = out - self.theta * out_diff
-        else:
-            out = out
-
-        return out
-
-
-def convert_CDC(net, dim=2, theta=0.3):
+def convert_CDC(net, theta=0.3):
     for name, mod in list(net.named_children()):
         convert_CDC(mod, theta)
-        if dim == 2 and type(mod) == nn.Conv2d:
+        if type(mod) == nn.Conv2d:
             mod.theta = theta
-            setattr(net, name, CDC_Conv2d(**mod.__dict__))
-        if dim == 3 and type(mod) == nn.Conv3d:
-            mod.theta = theta
-            setattr(net, name, CDC_Conv3d(**mod.__dict__))
-
+            setattr(net, name, DCD_Conv2d(**mod.__dict__))
 
 class Time_filter(nn.Module):
     def __init__(self, in_channels, voxel_size, theta=3/9, mask_kernel=3):
@@ -312,16 +273,13 @@ class Model(nn.Module):
 
         if backbone == 'gait2d':
             import gait2d
-            dim = 2
             backbone_model = gait2d.Model(num_classes=num_classes, in_channels=in_channels)
             backbone_model.name = 'gait2d'
             last_layer_name = 'classifier'
             feature_dim = getattr(backbone_model, last_layer_name)[0].in_features
             temporal_shift_block = 'ResidualBlock'
-            consen_model = ConsensusModule(consensus_type, dim=1, input_channels=1024, num_segments=size[0], num_classes=num_classes)
         elif backbone == 'resnet34':
             import torchvision.models.resnet as resnet
-            dim = 2
             backbone_model = resnet.resnet34(pretrained=False)
             last_layer_name = 'fc'
             backbone_model.name = 'resnet34'
@@ -329,15 +287,6 @@ class Model(nn.Module):
             temporal_shift_block = 'BasicBlock'
             conv1 = getattr(backbone_model, 'conv1')
             setattr(backbone_model, 'conv1', nn.Conv2d(2, conv1.out_channels, conv1.kernel_size, conv1.stride, conv1.padding, conv1.dilation, conv1.groups, conv1.bias))
-            consen_model = ConsensusModule(consensus_type, dim=1, input_channels=1024, num_segments=size[0], num_classes=num_classes)
-        elif backbone == 'i3d':
-            import i3d
-            dim = 3
-            backbone_model = i3d.Model(num_classes=num_classes, in_channels=in_channels)
-            backbone_model.name = 'i3d'
-            last_layer_name = 'logits'
-            feature_dim = getattr(backbone_model, last_layer_name).conv3d.in_channels
-            consen_model = nn.Linear(feature_dim, num_classes)
 
         self.encoder = nn.ModuleDict({
             'tfilter': Time_filter(in_channels=in_channels, voxel_size=size, theta=mask_theta, mask_kernel=mask_kernel),
@@ -346,15 +295,14 @@ class Model(nn.Module):
                                     nn.LayerNorm(size[-2:]),
                                     ),
             'backbone': backbone_model,
-            'consen': consen_model
+            'consen': ConsensusModule(consensus_type, dim=1, input_channels=1024, num_segments=size[0], num_classes=num_classes)
         })
 
         if is_CDC:
             print('Converting the Conv to CDConv')
-            convert_CDC(self.encoder['backbone'], dim=dim, theta=CDC_theta)
+            convert_CDC(self.encoder['backbone'], theta=CDC_theta)
 
         if is_shift:
-            assert '3d' not in backbone, "3D conv is not supported!"
             print(f'Converting the {temporal_shift_block} to temporal-shift module...')
             convert_temporal_shift(self.encoder['backbone'], size[0], n_div=shift_div, place=temporal_shift_block)
 
@@ -368,17 +316,13 @@ class Model(nn.Module):
         setattr(self.encoder['backbone'], last_layer_name, last_layer)
 
     def forward(self, x):
-        x = self.encoder['tfilter'](x)
-        x = self.encoder['sfilter'](x)
+        # x = self.encoder['tfilter'](x)
+        # x = self.encoder['sfilter'](x)
 
-        if '3d' in self.encoder['backbone'].name:
-            x = self.encoder['backbone'].extract_features(x)
-            x = x.squeeze(-1).squeeze(-1).squeeze(-1)
-            x = self.encoder['backbone'].logits(x)
-        else:    
-            x = x.transpose(2, 1)
-            x = x.reshape(-1, *x.size()[2:])
-            x = self.encoder['backbone'](x)
+        x = x.transpose(2, 1)
+        x = x.reshape(-1, *x.size()[2:])
+
+        x = self.encoder['backbone'](x)
         x = self.encoder['consen'](x)
         return x
 

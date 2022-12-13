@@ -142,7 +142,7 @@ class InceptionModule(nn.Module):
         return torch.cat([b0,b1,b2,b3], dim=1)
 
 
-class I3D(nn.Module):
+class Model(nn.Module):
     """Inception-v1 I3D architecture.
     The model is introduced in:
         Quo Vadis, Action Recognition? A New Model and the Kinetics Dataset
@@ -179,8 +179,9 @@ class I3D(nn.Module):
         'Predictions',
     )
 
-    def __init__(self, config, spatial_squeeze=True, final_endpoint='Logits', 
-                name='inception_i3d', dropout_keep_prob=0.0, **kwargs):
+    def __init__(self, num_classes=400, spatial_squeeze=True, 
+                final_endpoint='Logits', name='inception_i3d', 
+                in_channels=3, dropout_keep_prob=0.0, **kwargs):
         """Initializes I3D model instance.
         Args:
           num_classes: The number of outputs in the logit layer (default 400, which
@@ -201,9 +202,7 @@ class I3D(nn.Module):
         if final_endpoint not in self.VALID_ENDPOINTS:
             raise ValueError('Unknown final endpoint %s' % final_endpoint)
 
-        super(I3D, self).__init__()
-        num_classes = config['Data'].get('num_classes', 10)
-        in_channels = config['Model'].get('in_channels', 2)
+        super(Model, self).__init__()
         self._num_classes = num_classes
         self._spatial_squeeze = spatial_squeeze
         self._final_endpoint = final_endpoint
@@ -215,7 +214,7 @@ class I3D(nn.Module):
         self.end_points = {}
         end_point = 'Conv3d_1a_7x7'
         self.end_points[end_point] = Unit3D(in_channels=in_channels, output_channels=64, kernel_shape=[3, 3, 3],
-                                            stride=(2, 2, 2), padding=(3,3,3),  name=name+end_point)
+                                            stride=(2, 2, 2), padding=(3,3,3), name=name+end_point)
         if self._final_endpoint == end_point: return
         
         end_point = 'MaxPool3d_2a_3x3'
@@ -288,7 +287,7 @@ class I3D(nn.Module):
         self.avg_pool = nn.AdaptiveAvgPool3d(output_size=[1, 1, 1])
         self.dropout = nn.Dropout(dropout_keep_prob)
         self.logits = Unit3D(in_channels=384+384+128+128, output_channels=self._num_classes,
-                             kernel_shape=[2, 2, 2],
+                             kernel_shape=[1, 1, 1],
                              padding=0,
                              activation_fn=None,
                              use_batch_norm=False,
@@ -328,11 +327,3 @@ class I3D(nn.Module):
             if end_point in self.end_points:
                 x = self._modules[end_point](x)
         return self.avg_pool(x)
-
-class Model(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.model = I3D(config)
-    
-    def forward(self, x):
-        return self.model(x)

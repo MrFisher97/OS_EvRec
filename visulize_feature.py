@@ -42,7 +42,7 @@ class Visual_Session(utils.Session):
         self.plotter = VisdomPlotter(env=f"{self.config['Model']['name']}", port=7000)
         self.writer = SummaryWriter('Runs') if recorder['show_tensorboard'] else None
 
-    def _build_model(self):
+    def build_model(self):
         super()._build_model()
         self.net = importlib.import_module(f"Tools.Model.{self.config['Model']['name']}").Model(**self.config['Model'])
         self.net = self.net.to(self.device)
@@ -117,7 +117,7 @@ class Visual_Session(utils.Session):
             self.plotter.images(enhance_result.detach().cpu().numpy(), win=f"Enhance_train_result@{self.config['Data']['scene']}", )
         return enhance_loss
 
-    def visualize(self):
+    def visualize_feature(self):
         # get feature
         self.net.eval()
         feat_list = []
@@ -174,16 +174,18 @@ class Visual_Session(utils.Session):
 
 
             # plot FFT
-            C = 1
+            C = 2
             img = np.flip(feat_list[0][0, 0, C])
+            img = np.flip(img, axis=1)
+            # img = feat_list[0][0, 0, C]
             self.plotter.heatMap(img, win=f"Img N{nsample}_S{self.config['Data']['scene']}_M{np.mean(img[img > 0]):.3f}_V{np.var(img[img > 0]):.3f}")
 
-            # min_val = np.min(img)
-            # self.plotter.histogram(img.flatten(), win=f"DIst N{nsample}_S{self.config['Data']['scene']}")
+            min_val = np.min(img)
+            self.plotter.histogram(img.flatten(), win=f"DIst N{nsample}_S{self.config['Data']['scene']}")
 
-            # FS = np.fft.fftn(img)
-            # FS = np.log(np.abs(np.fft.fftshift(FS)) ** 2)
-            # self.plotter.heatMap(FS, win=f"Spectrum N{nsample}_S{self.config['Data']['scene']}")
+            FS = np.fft.fftn(img)
+            FS = np.log(np.abs(np.fft.fftshift(FS)) ** 2)
+            self.plotter.heatMap(FS, win=f"Spectrum N{nsample}_S{self.config['Data']['scene']}")
 
     def visualize_point_cloud(self):
         from sklearn.utils import resample
@@ -206,6 +208,21 @@ class Visual_Session(utils.Session):
         markercolor[data[:, -1] == 0] *= (0, 200, 200)
         markercolor[data[:, -1] == 1] *= (200, 0, 100)
         self.plotter.scatter(data[:, :3], win=f"test_S{self.config['Data']['scene']}_N{nsample}_P{npoint}", color=markercolor)
+
+
+    def visualize_img(self):
+        for scene in ['l0', 'l4', 'l16', 'l64']:
+            self.config['Data']['scene'] = scene
+            self.config['Data']['data_file'] = "C36W03.h5"
+            dataset = self._load_data('Train').dataset
+
+            nsample = 1
+            item = dataset[nsample]
+            data, label = item['data'], torch.as_tensor([item['label']])
+            data = data.transpose(0, 1).detach().numpy()
+            self.plotter.images(data, if_standard=True, win=scene)
+            # data = torch.concat([data, torch.zeros(data.size(0), 1)], 1)
+
 
 
     def test(self):
@@ -242,17 +259,17 @@ class Visual_Session(utils.Session):
 
 if __name__ == '__main__':
     args = argparse.ArgumentParser()
-    args.add_argument('--config', type=str, default='DAVISGait_tmp2d_TSN')
-    args.add_argument('--log_dir', type=str, default='Output/DAVISGait_tmp2d_TSN_08291133')
+    args.add_argument('--config', type=str, default='DAVISChar_One_Stage_TSN')
+    args.add_argument('--log_dir', type=str, default='Output/DAVISChar_One_Stage_TSN_09071617')
     args = vars(args.parse_args())
     config = json.load(open(f"Tools/Config/{args['config']}.json", 'r'))
     config['log_dir'] = args['log_dir']
     # exit(0)
     sess = Visual_Session(config)
-    sess._build_model()
-    # sess.test()
-    sess.visualize()
-    # sess.visualize_point_cloud()
+    sess.build_model()
+    sess.test()
+    # sess.visualize_feature()
+    # sess.visualize_img()
     # sess.close()
 
     # print model architecture

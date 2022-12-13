@@ -1,17 +1,17 @@
 {
     "Data": {
-        "dataset": "DAVISChar",
-        "root": "Dataset/DAVISChar/",
-        "data_file": "C36W03.h5",
+        "dataset": "DVSGesture",
+        "root": "Dataset/DVSGesture/",
+        "data_file": "C11W05.h5",
         "map_file": "map.csv",
-        "scene": "l0",
-        "__scene": ["l0", "l4", "l16", "l64", "all"],
+        "scene": "lab",
+        "__scene": ["fluorescent_led", "fluorescent", "natural", "led", "lab", "all"],
         "num_samples": null, 
         "__num_samples": [1000],
-        "num_classes": 36,
-        "form": "Acc_Time_Clip",
+        "num_classes": 10,
+        "form": "Clip",
         "num_point": null,
-        "size": [3, 224, 224], 
+        "size": [16, 128, 128], 
         "__size": "TxHxW",
         "split_by": "time", 
         "ord": "txyp",
@@ -23,12 +23,12 @@
         "name": "One_Stage_TSN",
         "__name": ["i3d", "pointnet2_msg", "Co_Model_3D", "Co_Model_2D", "resnet34", "resnet3d", "gait2d", "gait3d"],
         "in_channels": 2,
-        "backbone": "resnet34",
+        "backbone": "i3d",
         "nIter": 1,
         "consensus_type": "avg",
         "mask_theta": 0.3, 
         "mask_kernel": 3,
-        "is_CDC": false, 
+        "is_CDC": true, 
         "CDC_theta": 0.1, 
         "is_shift": false, 
         "shift_div": 4
@@ -38,8 +38,8 @@
         "file_list": "train.csv",
         "lr": 1.0e-4,
         "weight_decay": 1.0e-4,
-        "num_epochs": 20,
-        "batch_size": 32,
+        "num_epochs": 25,
+        "batch_size": 16,
         "shuffle": true,
         "num_workers": 4,
         "drop_last": true
@@ -47,9 +47,9 @@
 
     "Test": {
         "file_list": "test.csv",
-        "batch_size": 32,
+        "batch_size": 16,
         "num_workers": 4,
-        "scenes": ["l0", "l4", "l16", "l64", "all"]
+        "scenes": ["fluorescent_led", "fluorescent", "natural", "led", "lab", "all"]
     },
 
     "Recorder": {

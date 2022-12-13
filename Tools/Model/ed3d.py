@@ -50,6 +50,7 @@ class DCD_Conv3d(nn.Module):
                  use_batch_norm=True,
                  _use_mask = True,
                  use_bias=False,
+                 theta=0.3,
                  name='DCD_Conv3d'):
         
         """Initializes DCD_Conv3d module."""
@@ -65,6 +66,7 @@ class DCD_Conv3d(nn.Module):
         self._use_bias = use_bias
         self.name = name
         self.padding = padding
+        self.theta = theta
         
         self.conv3d = nn.Conv3d(in_channels=in_channels,
                                 out_channels=self._output_channels,
@@ -128,7 +130,7 @@ class DCD_Conv3d(nn.Module):
             else:    
                 out_diff = F.conv3d(input=x, weight=kernel_diff, bias=self.conv3d.bias, stride=self.conv3d.stride,
                                 padding=0, dilation=self.conv3d.dilation, groups=self.conv3d.groups)
-            out = out_norm - 0.3 * out_diff
+            out = out_norm - self.theta * out_diff
         else:
             out = out_norm
 
